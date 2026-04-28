@@ -1,0 +1,35 @@
+ocr:
+  engine: "auto"  # auto | paddle | tesseract
+  language: "chi_tra+eng"
+  dpi: 300
+  paddle_confidence: 0.5
+
+chunking:
+  strategy: "smart"  # claim-number > section > paragraph
+  max_chars: 800
+  min_chars: 30
+  xml_split_claims: true
+  xml_split_abstract: true
+
+embedding:
+  model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+  batch_size: 32
+
+reranker:
+  enabled: true
+  model: "BAAI/bge-reranker-v2-m3"
+  fetch_multiplier: 3
+
+vector_store:
+  type: "qdrant"
+  url: "http://localhost:6333"
+  collection: "patent_chunks"
+
+rag:
+  llm_model: "qwen2.5:3b-instruct"
+  temperature: 0.3
+  max_tokens: 1500
+  top_k: 5
+  language: "en"
+  require_citations: true
+  max_history_turns: 10

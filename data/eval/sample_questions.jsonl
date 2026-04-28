@@ -1,0 +1,10 @@
+{"question":"What are the key technical features of this patent?","category":"claims","expected_keywords":["technical","feature"]}
+{"question":"List the core elements of Claim 1","category":"claims","expected_keywords":["claim"]}
+{"question":"Who is the applicant?","category":"bibliographic","expected_keywords":["applicant"]}
+{"question":"What is the IPC classification?","category":"bibliographic","expected_keywords":["IPC"]}
+{"question":"Summarize the abstract","category":"summary","expected_keywords":["abstract"]}
+{"question":"What technical problem does this invention solve?","category":"summary","expected_keywords":["problem"]}
+{"question":"What are the main components mentioned?","category":"claims","expected_keywords":["component"]}
+{"question":"What improvements over prior art?","category":"comparison","expected_keywords":["improvement"]}
+{"question":"When was this patent filed?","category":"bibliographic"}
+{"question":"Summarize the technical solution","category":"summary","expected_keywords":["technical"]}

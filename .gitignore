@@ -1,0 +1,17 @@
+data/patents/*.pdf
+data/patents/*.xml
+data/patents_real/
+data/patents_real_split/
+data/processed/
+data/eval/report.html
+volumes/
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.local
+.DS_Store
+.claude/settings.local.json
+.claude/projects/
+*.log
+/tmp/

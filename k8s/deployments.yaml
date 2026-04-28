@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qdrant
+  namespace: patent-rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qdrant
+  template:
+    metadata:
+      labels:
+        app: qdrant
+    spec:
+      containers:
+      - name: qdrant
+        image: qdrant/qdrant:latest
+        ports:
+        - containerPort: 6333
+        volumeMounts:
+        - name: data
+          mountPath: /qdrant/storage
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: qdrant-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  namespace: patent-rag
+spec:
+  selector:
+    app: qdrant
+  ports:
+  - port: 6333
+    targetPort: 6333
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qdrant-pvc
+  namespace: patent-rag
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: patent-api
+  namespace: patent-rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: patent-api
+  template:
+    metadata:
+      labels:
+        app: patent-api
+    spec:
+      containers:
+      - name: api
+        image: patent-rag-api:latest
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - secretRef:
+            name: patent-env
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: patent-api
+  namespace: patent-rag
+spec:
+  type: LoadBalancer
+  selector:
+    app: patent-api
+  ports:
+  - port: 80
+    targetPort: 8000
