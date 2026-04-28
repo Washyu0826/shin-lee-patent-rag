@@ -178,9 +178,18 @@ async def _ingest_pdf(file: UploadFile, ocr_engine: str, reprocess: bool, tag: s
         raise HTTPException(422, "No chunks generated")
 
     count = rag_service.upsert_chunks(chunks, tag=tag)
+    # Dual-write into m3 collection so cross-lingual (zh<->en) queries work
+    # via the bge-m3 path. Failure here doesn't fail the upload — baseline
+    # is the source of truth, m3 is best-effort enrichment.
+    m3_count = 0
+    try:
+        m3_count = retrieval_v2.upsert_chunks_m3(chunks, tag=tag)
+    except Exception as e:
+        print(f"[upload] m3 dual-write failed (baseline still indexed): {e}")
     doc_info = {
         "doc_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"pdf::{safe_name}")), "filename": safe_name,
         "total_pages": ocr_result["total_pages"], "chunks_created": count,
+        "m3_chunks_created": m3_count,
         "ocr_applied": ocr_result.get("ocr_applied", False),
         "ocr_engine": ocr_result.get("ocr_engine", ""),
         "file_size_kb": ocr_result.get("file_size_kb", 0),
@@ -225,6 +234,11 @@ async def ingest_xml(file: UploadFile = File(...), tag: str = Query(""), user: d
 
     chunks = chunk_patent_xml(patent)
     count = rag_service.upsert_chunks(chunks, tag=tag)
+    # Dual-write into m3 (best-effort, baseline is source of truth)
+    try:
+        retrieval_v2.upsert_chunks_m3(chunks, tag=tag)
+    except Exception as e:
+        print(f"[ingest_xml] m3 dual-write failed: {e}")
     rag_service.log_document({
         "doc_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"xml::{patent['doc_number'] or safe_name}")),
         "filename": safe_name,
@@ -244,10 +258,15 @@ async def scan_directory(dir_path: str = Query("./data/patents"), tag: str = Que
     safe_dir = _safe_scan_dir(dir_path)
     patents = scan_xml_directory(str(safe_dir))
     total_chunks = 0
+    m3_total = 0
     for p in patents:
         chunks = chunk_patent_xml(p)
         total_chunks += rag_service.upsert_chunks(chunks, tag=tag)
-    return {"patents_found": len(patents), "total_chunks": total_chunks}
+        try:
+            m3_total += retrieval_v2.upsert_chunks_m3(chunks, tag=tag)
+        except Exception as e:
+            print(f"[scan] m3 dual-write failed for {p.get('doc_number','?')}: {e}")
+    return {"patents_found": len(patents), "total_chunks": total_chunks, "m3_chunks": m3_total}
 
 
 # ─── Chat (non-streaming + streaming) ───
