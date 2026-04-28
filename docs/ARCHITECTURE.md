@@ -356,7 +356,7 @@ patent_rag_uptime_s
 | Single FastAPI process | 部署簡單、debug 不用看跨機器 log | 單 worker、scale 受 GIL 限制 |
 | In-process embedder/reranker | 避免 model server 成本與冷啟動 | 啟動慢 ~15s |
 | Two Qdrant collections（baseline + m3）| 允許 A/B 對比，不污染對方索引 | RAM 翻倍 |
-| MiniLM baseline + bge-m3 SOTA 並存 | demo 賣點：可以同題對比 635× lift | 維護兩條 ingest 路徑 |
+| MiniLM baseline + bge-m3 SOTA 並存 | demo 賣點：可以同題對比，最戲劇性的指標是某道間接語意測試題 baseline 0.0014 → m3+HyDE 0.889（接近零的比值要謹慎解讀，見 README 註腳）| 維護兩條 ingest 路徑 |
 | Rule-based router (`_classify_query`) | 0 LLM call、確定性、可解釋 | 無法處理 edge case，未來可換 small classifier model |
 | Reranker confidence floor | 防止低分上下文進 LLM 產生 hallucination | 偶爾擋掉合理但低分的答案（floor=0.05 是保守值）|
 | MMR with same-doc indicator | 強制跨專利多樣性，cross-doc 題型表現變好 | 同 patent 內多個相關段不會一起出現 |
