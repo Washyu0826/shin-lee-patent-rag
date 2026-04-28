@@ -39,7 +39,8 @@ def _split_csv_env(name: str) -> list[str]:
 
 
 def _normalize_uploaded_name(filename: str, allowed_suffixes: set[str]) -> str:
-    safe_name = Path((filename or "").strip()).name
+    raw = (filename or "").strip().replace("\\", "/")
+    safe_name = Path(raw).name
     if not safe_name or safe_name in {".", ".."}:
         raise HTTPException(400, "Invalid filename")
     if Path(safe_name).suffix.lower() not in allowed_suffixes:
