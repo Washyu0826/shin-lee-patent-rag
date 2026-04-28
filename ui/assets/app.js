@@ -53,6 +53,40 @@ function toggleTheme(){
   localStorage.setItem('theme',next);
 }
 
+// ─── SVG icon library (Lucide-derived, inline for tree-shake-free use) ───
+const ICONS = {
+  thumbsUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88z"/></svg>',
+  thumbsDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88z"/></svg>',
+  fileEmpty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+  inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+};
+
+// ─── Toast notification ───
+function toast(msg, kind){
+  // kind: 'success' | 'error' | 'info' | 'warning'
+  const t=document.createElement('div');
+  t.className='toast toast-'+(kind||'info');
+  t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>{t.classList.add('toast-leaving');setTimeout(()=>t.remove(),200)},3500);
+}
+
+// ─── Skeleton helpers ───
+function skelRows(n, cls){
+  cls = cls || 'skel-line';
+  return Array.from({length:n}, ()=>`<div class="skel-row"><div class="skeleton skel-line"></div><div class="skeleton skel-pill"></div></div>`).join('');
+}
+function skelTableRows(n, cols){
+  return Array.from({length:n},()=>`<tr>${Array.from({length:cols},()=>'<td><div class="skeleton skel-line"></div></td>').join('')}</tr>`).join('');
+}
+function emptyState(icon, title, body){
+  return `<div class="empty-state">
+    <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>
+    <div class="empty-state-title">${esc(title)}</div>
+    <div class="empty-state-body">${esc(body)}</div>
+  </div>`;
+}
+
 // ─── Upload ───
 const dz=document.getElementById('dz'),fi=document.getElementById('fi');
 dz.addEventListener('click',()=>fi.click());
@@ -63,8 +97,9 @@ fi.addEventListener('change',e=>handleFiles(e.target.files));
 
 async function handleFiles(files){
   const ocr=document.getElementById('ocrSel').value,tag=document.getElementById('tagInput').value;
+  const status = document.getElementById('upStatus');
   for(const f of files){
-    document.getElementById('upStatus').textContent=`Uploading ${f.name}...`;
+    status.textContent=`Uploading ${f.name}…`;
     const fd=new FormData();fd.append('file',f);
     const isXml=f.name.toLowerCase().endsWith('.xml');
     const url=isXml?`/api/ingest/xml?tag=${encodeURIComponent(tag)}`:`/api/upload?ocr_engine=${encodeURIComponent(ocr)}&tag=${encodeURIComponent(tag)}`;
@@ -72,10 +107,15 @@ async function handleFiles(files){
       const r=await fetch(url,{method:'POST',body:fd,headers:authHeaders()});
       if(!r.ok){const e=await r.json();throw new Error(e.detail)}
       const d=await r.json();
-      document.getElementById('upStatus').textContent=`Done: ${f.name} (${d.chunks_created||d.chunks} chunks)`;
-      addBot(`<b>${esc(f.name)}</b> ingested — ${d.chunks_created||d.chunks} chunks`);
+      status.textContent='';
+      const chunks = d.chunks_created || d.chunks;
+      toast(`${f.name} → ${chunks} chunks indexed`, 'success');
+      addBot(`<b>${esc(f.name)}</b> ingested — ${chunks} chunks`);
       refreshAll();
-    }catch(e){document.getElementById('upStatus').textContent=`Error: ${e.message}`}
+    }catch(e){
+      status.textContent='';
+      toast(`Upload failed: ${e.message}`, 'error');
+    }
   }
   fi.value='';
 }
@@ -263,7 +303,7 @@ async function send(presetQ, opts){
       <button class="regen-btn" onclick="send(${inlineJson(q)},{engine:'auto'})">Auto</button>
     </div>`;
     const queryLogId = Number(summary.query_log_id) || 0;
-    sh+=`<div class="fb-row"><button class="fb-btn" onclick="fb(this,1,${queryLogId})">👍</button><button class="fb-btn" onclick="fb(this,-1,${queryLogId})">👎</button><input class="fb-text" placeholder="Feedback..." onkeydown="if(event.key==='Enter')sendFb(this)"></div>`;
+    sh+=`<div class="fb-row"><button class="fb-btn" onclick="fb(this,1,${queryLogId})" aria-label="Helpful">${ICONS.thumbsUp}</button><button class="fb-btn" onclick="fb(this,-1,${queryLogId})" aria-label="Not helpful">${ICONS.thumbsDown}</button><input class="fb-text" placeholder="Feedback…" onkeydown="if(event.key==='Enter')sendFb(this)"></div>`;
     el.querySelector('.bubble').insertAdjacentHTML('beforeend',sh);
   }catch(e){document.getElementById(lid)?.remove();addBot('Error: '+esc(e.message))}
   document.getElementById('sendBtn').disabled=false;loadSuggestions();
@@ -360,7 +400,9 @@ function sendFb(inp){
   const rating = Number(inp.dataset.rating || 0);
   const queryLogId = Number(inp.dataset.queryLogId || 0);
   if(!queryLogId || !rating){inp.value='';inp.style.display='none';return}
-  fetch('/api/feedback',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({query_log_id:queryLogId,rating,comment:inp.value})});
+  fetch('/api/feedback',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({query_log_id:queryLogId,rating,comment:inp.value})})
+    .then(r=>{if(r.ok)toast('Thanks for the feedback','success');else toast('Could not send feedback','error')})
+    .catch(()=>toast('Could not send feedback','error'));
   inp.value='';inp.style.display='none';
 }
 
@@ -412,28 +454,60 @@ function showPage(p, navEl){
 }
 
 async function loadPatents(){
+  const tbody = document.getElementById('patTbody');
+  tbody.innerHTML = skelTableRows(5, 5);
   try{
     const d=await(await fetch('/api/patents',{headers:authHeaders()})).json();
-    document.getElementById('patTbody').innerHTML=d.patents.map(p=>`<tr><td>${esc(p.doc_number)}</td><td>${esc(p.title||'')}</td><td>${esc(p.ipc||'')}</td><td>${esc(p.applicant||'')}</td><td>${esc(p.filename)}</td></tr>`).join('');
-  }catch{}
+    if(!d.patents?.length){
+      tbody.innerHTML = `<tr><td colspan="5" style="padding:0">${emptyState(
+        '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/>',
+        'No patents indexed',
+        'Upload XML files or use scripts/fetch_real_patents.py to ingest TIPO data.'
+      )}</td></tr>`;
+    } else {
+      tbody.innerHTML=d.patents.map(p=>`<tr><td>${esc(p.doc_number)}</td><td>${esc(p.title||'')}</td><td>${esc(p.ipc||'')}</td><td>${esc(p.applicant||'')}</td><td>${esc(p.filename)}</td></tr>`).join('');
+    }
+  }catch(e){
+    tbody.innerHTML = `<tr><td colspan="5" style="padding:0">${emptyState(
+      '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+      'Could not load patents',
+      esc(e.message || 'Network error')
+    )}</td></tr>`;
+  }
 }
 
 async function loadAdmin(){
+  const root = document.getElementById('adminContent');
+  root.innerHTML = `<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);gap:var(--sp-3);margin-bottom:var(--sp-5)">
+    ${Array.from({length:4},()=>'<div class="skel-card"></div>').join('')}
+  </div><div class="skel-card" style="height:240px"></div>`;
   try{
     const s=await(await fetch('/api/admin/stats',{headers:authHeaders()})).json();
-    let h=`<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+    let h=`<div class="stat-grid" style="grid-template-columns:repeat(4,1fr);gap:var(--sp-3);margin-bottom:var(--sp-5)">
       <div class="stat-c"><div class="v">${s.total_chunks||0}</div><div class="l">Chunks</div></div>
       <div class="stat-c"><div class="v">${s.total_documents||0}</div><div class="l">Documents</div></div>
       <div class="stat-c"><div class="v">${s.total_queries||0}</div><div class="l">Queries</div></div>
       <div class="stat-c"><div class="v">${s.avg_latency_ms?(s.avg_latency_ms/1000).toFixed(1)+'s':'-'}</div><div class="l">Avg Latency</div></div>
     </div>`;
     if(s.hot_topics?.length){
-      h+='<h3 style="font-size:13px;margin:8px 0">Hot Topics</h3><table><tr><th>Query</th><th>Count</th></tr>';
-      s.hot_topics.forEach(t=>{h+=`<tr><td>${esc(t.query)}</td><td>${esc(t.count)}</td></tr>`});
-      h+='</table>';
+      h+='<h3 style="font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--c-text);margin:var(--sp-5) 0 var(--sp-3)">Hot Topics</h3><table><thead><tr><th>Query</th><th style="width:80px;text-align:right">Count</th></tr></thead><tbody>';
+      s.hot_topics.forEach(t=>{h+=`<tr><td>${esc(t.query)}</td><td style="text-align:right;font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace">${esc(t.count)}</td></tr>`});
+      h+='</tbody></table>';
+    } else {
+      h += emptyState(
+        '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+        'No queries yet',
+        'Send a few questions in the Chat tab and they will show up here.'
+      );
     }
-    document.getElementById('adminContent').innerHTML=h;
-  }catch{}
+    root.innerHTML=h;
+  }catch(e){
+    root.innerHTML = emptyState(
+      '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+      'Could not load stats',
+      esc(e.message || 'Network error')
+    );
+  }
 }
 
 // ─── Refresh ───
@@ -449,9 +523,22 @@ async function refreshStats(){
   }catch{}
 }
 async function refreshFiles(){
+  const fileList = document.getElementById('fileList');
+  if(fileList && !fileList.children.length){
+    fileList.innerHTML = skelRows(3);
+  }
   try{
     const d=await(await fetch('/api/files',{headers:authHeaders()})).json();
-    document.getElementById('fileList').innerHTML=d.files.filter(f=>f.filename!=='.gitkeep').map(f=>`<div class="file-item" onclick="pvPage(${inlineJson(f.filename)},1)"><span class="nm">${esc(f.filename)}</span><span class="sz">${esc(f.size_kb)}K</span></div>`).join('');
+    const files = d.files.filter(f=>f.filename!=='.gitkeep');
+    if(!files.length){
+      fileList.innerHTML = emptyState(
+        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+        'No files yet',
+        'Drop a PDF or XML above to get started.'
+      );
+    } else {
+      fileList.innerHTML = files.map(f=>`<div class="file-item" onclick="pvPage(${inlineJson(f.filename)},1)"><span class="nm">${esc(f.filename)}</span><span class="sz">${esc(f.size_kb)}K</span></div>`).join('');
+    }
     // Update scope selector — PDFs by filename, XMLs by doc_number (the latter
     // produces a doc_number_filter so claim/abstract/bibliographic chunks all match)
     const sel=document.getElementById('scopeSel');
