@@ -114,7 +114,7 @@
             <div data-i18n="welcome_body" style="font-size:var(--fs-base);color:var(--c-text-2);margin-top:6px;line-height:1.6">Ask in English or Chinese. Citations link back to the source page.</div>
             <div class="muted" style="font-size:var(--fs-xs);margin-top:10px;letter-spacing:0.04em">bge-m3 + RRF · CrossEncoder rerank · streaming · multi-turn</div>
             <div class="muted" style="font-size:var(--fs-xs);margin-top:6px">
-              <span class="kbd">Ctrl K</span> cycle engine · <span class="kbd">Ctrl L</span> focus input
+              <span class="kbd">Ctrl K</span> command palette · <span class="kbd">Ctrl L</span> focus input
             </div>
           </div>
         </div>
@@ -184,6 +184,22 @@
     <div class="pv-info" id="pvInfo"></div>
   </div>
 
+</div>
+
+<!-- Command palette -->
+<div class="cmdk-overlay" id="cmdkOverlay" onclick="if(event.target===this)closeCmdk()">
+  <div class="cmdk-box" role="dialog" aria-label="Command palette">
+    <div class="cmdk-input-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="cmdkInput" class="cmdk-input" placeholder="Type a command or search…" autocomplete="off">
+    </div>
+    <div class="cmdk-list" id="cmdkList"></div>
+    <div class="cmdk-footer">
+      <span><span class="kbd">↑</span><span class="kbd">↓</span> navigate</span>
+      <span><span class="kbd">↵</span> run</span>
+      <span><span class="kbd">esc</span> close</span>
+    </div>
+  </div>
 </div>
 
 <!-- Funnel modal -->

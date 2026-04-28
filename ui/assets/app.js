@@ -234,7 +234,7 @@ async function send(presetQ, opts){
             el=document.getElementById(mid);
           }
           tokens++;fullAnswer+=d.content;
-          document.getElementById(mid+'_text').innerHTML=esc(fullAnswer).replace(/\[Source (\d+)\]/g,'<span class="cite-ref" onclick="showSrc($1)">$&</span>');
+          document.getElementById(mid+'_text').innerHTML=mdRender(fullAnswer);
         }
         else if(d.type==='sources'){sources=d.sources;window._lastSrc=sources}
         else if(d.type==='summary'){summary=d}
@@ -252,7 +252,7 @@ async function send(presetQ, opts){
     if(!el && lowConfidenceMsg){
       document.getElementById(lid)?.remove();
       mid='m'+msgIdCounter++;
-      document.getElementById('msgs').insertAdjacentHTML('beforeend',`<div class="msg bot" id="${mid}"><div class="av">AI</div><div class="bubble"><span id="${mid}_text">${esc(lowConfidenceMsg)}</span></div></div>`);
+      document.getElementById('msgs').insertAdjacentHTML('beforeend',`<div class="msg bot" id="${mid}"><div class="av">AI</div><div class="bubble"><span id="${mid}_text">${mdRender(lowConfidenceMsg)}</span></div></div>`);
       el=document.getElementById(mid);
       ttftMs = Math.round(performance.now()-t0);
     }
@@ -383,6 +383,48 @@ function addBot(h){document.getElementById('msgs').insertAdjacentHTML('beforeend
 function scroll(){const m=document.getElementById('msgs');m.scrollTop=m.scrollHeight}
 function str(s){return String(s ?? '')}
 function esc(s){return str(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}
+
+// ─── Markdown renderer (escape-first, then apply a small allowlist) ───
+// Supports: **bold**, *italic*, `code`, ```block```, > quote, ###/##/# headings,
+// - / 1. lists (single level), [text](url) links, [Source N] citations.
+function mdRender(text){
+  let s = str(text)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // Code blocks ```...```
+  s = s.replace(/```([\s\S]*?)```/g, (_, code) =>
+    `<pre class="md-pre"><code>${code.replace(/\n/g,'\n')}</code></pre>`);
+
+  // Headings — must be at line start
+  s = s.replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>');
+  s = s.replace(/^## (.+)$/gm,  '<h2 class="md-h2">$1</h2>');
+  s = s.replace(/^# (.+)$/gm,   '<h1 class="md-h1">$1</h1>');
+
+  // Block-quote
+  s = s.replace(/^> (.+)$/gm, '<blockquote class="md-q">$1</blockquote>');
+
+  // Lists — group consecutive list items into one ul/ol
+  s = s.replace(/(?:^[-*] .+(?:\n|$))+/gm, m =>
+    '<ul class="md-list">' + m.trim().split(/\n/).map(l=>`<li>${l.replace(/^[-*] /,'')}</li>`).join('') + '</ul>');
+  s = s.replace(/(?:^\d+\. .+(?:\n|$))+/gm, m =>
+    '<ol class="md-list">' + m.trim().split(/\n/).map(l=>`<li>${l.replace(/^\d+\. /,'')}</li>`).join('') + '</ol>');
+
+  // Inline: bold, italic, code, links
+  s = s.replace(/\*\*([^\*\n]+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^\*])\*([^\*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');
+  s = s.replace(/`([^`\n]+?)`/g, '<code class="md-code">$1</code>');
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+  // Citations [Source N] → clickable
+  s = s.replace(/\[Source (\d+)\]/g,
+    '<span class="cite-ref" onclick="showSrc($1)">[Source $1]</span>');
+
+  // Soft line breaks (don't break inside block elements)
+  s = s.replace(/\n(?!<)/g, '<br>');
+
+  return s;
+}
 function escAttr(s){return str(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function inlineJson(value){return escAttr(JSON.stringify(value ?? ''))}
 function asPage(value){const n=Number(value);return Number.isFinite(n)&&n>0?Math.floor(n):1}
@@ -553,22 +595,127 @@ async function refreshFiles(){
   }catch{}
 }
 
-// ─── Keyboard shortcuts (B6) ───
+// ─── Command palette (Cmd/Ctrl+K) ───
+const CMDK = {
+  open: false,
+  active: 0,
+  filtered: [],
+};
+
+function cmdkCommands(){
+  return [
+    { group:'Navigation', label:'Go to Chat',     shortcut:'G C', icon:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', run:()=>showPage('chat') },
+    { group:'Navigation', label:'Go to Patents',  shortcut:'G P', icon:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>', run:()=>showPage('patents') },
+    { group:'Navigation', label:'Go to Compare',  shortcut:'G M', icon:'<path d="M16 3h5v5"/><path d="M21 3l-7 7"/><path d="M8 21H3v-5"/><path d="M3 21l7-7"/>', run:()=>showPage('compare') },
+    { group:'Navigation', label:'Go to Admin',    shortcut:'G A', icon:'<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>', run:()=>showPage('admin') },
+
+    { group:'Engine', label:'Set engine: Auto (route by query)', icon:'<polyline points="20 6 9 17 4 12"/>', run:()=>setEngine('auto') },
+    { group:'Engine', label:'Set engine: Baseline (MiniLM)',     icon:'<circle cx="12" cy="12" r="3"/>', run:()=>setEngine('baseline') },
+    { group:'Engine', label:'Set engine: SOTA (bge-m3 + RRF)',   icon:'<polygon points="12 2 15 8 22 9 17 14 18 21 12 18 6 21 7 14 2 9 9 8"/>', run:()=>setEngine('m3') },
+    { group:'Engine', label:'Toggle HyDE',                       icon:'<path d="M9 11H1l4-4M5 11l-4-4M19 21h-8M19 21V9M19 21l4-4M19 9l4 4"/>', run:()=>toggleHyde() },
+    { group:'Engine', label:'Open retrieval funnel',             icon:'<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>', run:()=>showFunnel() },
+
+    { group:'Appearance', label:'Toggle theme (light/dark)', shortcut:'⇧ T', icon:'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>', run:()=>toggleTheme() },
+    { group:'Appearance', label:'Switch language: English',  icon:'<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>', run:()=>setLang('en') },
+    { group:'Appearance', label:'Switch language: 繁體中文', icon:'<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>', run:()=>setLang('zh') },
+
+    { group:'Actions', label:'Focus message input',  shortcut:'⌘ L', icon:'<path d="M3 5h18M3 12h18M3 19h18"/>', run:()=>document.getElementById('qi').focus() },
+    { group:'Actions', label:'Export chat history',                  icon:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>', run:()=>exportChat() },
+    { group:'Actions', label:'Sign out',                             icon:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>', run:()=>logout() },
+  ];
+}
+
+function setEngine(v){
+  const sel=document.getElementById('engineSel');
+  if(!sel) return;
+  sel.value=v;
+  toast(`Engine → ${sel.options[sel.selectedIndex].text}`,'info');
+}
+function toggleHyde(){
+  const cb=document.getElementById('hydeChk');
+  if(!cb) return;
+  cb.checked=!cb.checked;
+  toast(`HyDE ${cb.checked?'enabled':'disabled'}`,'info');
+}
+
+function openCmdk(){
+  CMDK.open=true; CMDK.active=0;
+  const overlay=document.getElementById('cmdkOverlay');
+  const input=document.getElementById('cmdkInput');
+  overlay.classList.add('open');
+  input.value='';
+  renderCmdk('');
+  setTimeout(()=>input.focus(),20);
+}
+function closeCmdk(){
+  CMDK.open=false;
+  document.getElementById('cmdkOverlay').classList.remove('open');
+}
+function renderCmdk(query){
+  const all=cmdkCommands();
+  const q=query.trim().toLowerCase();
+  const filtered = !q ? all : all.filter(c=>c.label.toLowerCase().includes(q) || c.group.toLowerCase().includes(q));
+  CMDK.filtered=filtered;
+  if(CMDK.active >= filtered.length) CMDK.active = Math.max(0, filtered.length-1);
+
+  const list=document.getElementById('cmdkList');
+  if(!filtered.length){
+    list.innerHTML='<div class="cmdk-empty">No commands match "'+esc(query)+'"</div>';
+    return;
+  }
+  let lastGroup=null;
+  list.innerHTML = filtered.map((c,i)=>{
+    let groupHeader='';
+    if(c.group !== lastGroup){
+      groupHeader = `<div class="cmdk-group-label">${esc(c.group)}</div>`;
+      lastGroup = c.group;
+    }
+    const sc = c.shortcut ? `<span class="cmdk-shortcut">${c.shortcut.split(' ').map(k=>`<span class="kbd">${esc(k)}</span>`).join('')}</span>` : '';
+    return groupHeader +
+      `<div class="cmdk-item ${i===CMDK.active?'cmdk-active':''}" data-i="${i}" onclick="cmdkRun(${i})" onmouseenter="cmdkSetActive(${i})">
+         <svg class="cmdk-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${c.icon}</svg>
+         <span class="cmdk-text">${esc(c.label)}</span>${sc}
+       </div>`;
+  }).join('');
+}
+function cmdkSetActive(i){
+  CMDK.active=i;
+  document.querySelectorAll('#cmdkList .cmdk-item').forEach((el,idx)=>el.classList.toggle('cmdk-active', idx===i));
+}
+function cmdkRun(i){
+  const cmd=CMDK.filtered[i];
+  if(!cmd) return;
+  closeCmdk();
+  setTimeout(()=>cmd.run(),20);
+}
+
 document.addEventListener('keydown', e=>{
-  // Cmd/Ctrl+K → cycle engine
-  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==='k'){
+  // Cmd/Ctrl+K → open palette
+  if((e.metaKey||e.ctrlKey) && !e.shiftKey && e.key.toLowerCase()==='k'){
     e.preventDefault();
-    const sel = document.getElementById('engineSel');
-    const opts = Array.from(sel.options);
-    sel.selectedIndex = (sel.selectedIndex + 1) % opts.length;
-    document.getElementById('upStatus').textContent = `Engine → ${sel.options[sel.selectedIndex].text}`;
-    setTimeout(()=>{document.getElementById('upStatus').textContent=''}, 1500);
+    if(CMDK.open) closeCmdk(); else openCmdk();
+    return;
   }
   // Cmd/Ctrl+L → focus input
   if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==='l'){
     e.preventDefault();
-    document.getElementById('qi').focus();
+    document.getElementById('qi')?.focus();
+    return;
   }
+  // Inside palette: Up/Down/Enter/Esc
+  if(CMDK.open){
+    if(e.key==='Escape'){ e.preventDefault(); closeCmdk(); }
+    else if(e.key==='ArrowDown'){ e.preventDefault(); cmdkSetActive(Math.min(CMDK.filtered.length-1, CMDK.active+1)); ensureCmdkVisible(); }
+    else if(e.key==='ArrowUp'){   e.preventDefault(); cmdkSetActive(Math.max(0, CMDK.active-1)); ensureCmdkVisible(); }
+    else if(e.key==='Enter'){     e.preventDefault(); cmdkRun(CMDK.active); }
+  }
+});
+function ensureCmdkVisible(){
+  const el=document.querySelector('#cmdkList .cmdk-active');
+  if(el) el.scrollIntoView({block:'nearest'});
+}
+document.addEventListener('input', e=>{
+  if(e.target?.id === 'cmdkInput') renderCmdk(e.target.value);
 });
 
 // Restore chat history
