@@ -571,6 +571,77 @@ async def suggestions(user: dict = Depends(require_user)):
     return {"suggestions": rag_service.get_suggested_questions()}
 
 
+@app.post("/api/admin/sync_m3")
+async def admin_sync_m3(user: dict = Depends(require_admin)):
+    """Backfill any baseline chunks that aren't in the m3 collection.
+
+    Use case: a user uploaded files before the dual-write code was deployed,
+    or the m3 dual-write silently failed during an upload (try/except in
+    /api/upload swallows m3 errors so the upload still succeeds). This
+    endpoint walks both collections, finds the chunks that exist in baseline
+    but not in m3, and re-encodes them with bge-m3.
+
+    Idempotent — safe to run repeatedly. Returns the number of newly indexed
+    chunks plus per-filename diff before the sync.
+    """
+    from collections import defaultdict
+    qd = rag_service.get_qdrant()
+
+    # Walk both collections, group counts by filename
+    def file_counts(coll: str) -> dict[str, int]:
+        out: dict[str, int] = defaultdict(int)
+        next_off = None
+        while True:
+            pts, next_off = qd.scroll(collection_name=coll, with_payload=True,
+                                      with_vectors=False, limit=1000, offset=next_off)
+            for p in pts:
+                fn = (p.payload or {}).get("filename", "")
+                out[fn] += 1
+            if next_off is None:
+                break
+        return dict(out)
+
+    base_counts = file_counts("patent_chunks")
+    try:
+        m3_counts = file_counts("patent_chunks_m3")
+    except Exception:
+        m3_counts = {}
+
+    behind: dict[str, int] = {f: base_counts[f] - m3_counts.get(f, 0)
+                              for f in base_counts
+                              if base_counts[f] > m3_counts.get(f, 0)}
+
+    if not behind:
+        return {"status": "in_sync", "synced": 0,
+                "baseline_total": sum(base_counts.values()),
+                "m3_total": sum(m3_counts.values())}
+
+    # For each lagging file, scroll its baseline chunks and upsert into m3
+    from qdrant_client.models import FieldCondition, Filter, MatchValue
+    total_synced = 0
+    for fn in behind:
+        flt = Filter(must=[FieldCondition(key="filename", match=MatchValue(value=fn))])
+        pts, _ = qd.scroll(collection_name="patent_chunks", scroll_filter=flt,
+                           with_payload=True, with_vectors=False, limit=500)
+        chunks = []
+        for p in pts:
+            pl = p.payload or {}
+            text = pl.get("text", "")
+            if not text:
+                continue
+            meta = {k: v for k, v in pl.items() if k != "text"}
+            chunks.append({"text": text, "metadata": meta})
+        try:
+            n = retrieval_v2.upsert_chunks_m3(chunks)
+            total_synced += n
+        except Exception as e:
+            return {"status": "error", "synced_before_error": total_synced,
+                    "failed_on": fn, "message": str(e)}
+
+    return {"status": "synced", "synced": total_synced, "files_synced": len(behind),
+            "per_file_diff_before": behind}
+
+
 @app.get("/api/coach")
 async def coach(user: dict = Depends(require_user)):
     """Query Coach: corpus-aware suggestions grouped by topic / applicant /
