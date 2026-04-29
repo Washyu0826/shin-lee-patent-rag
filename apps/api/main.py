@@ -567,6 +567,13 @@ async def suggestions(user: dict = Depends(require_user)):
     return {"suggestions": rag_service.get_suggested_questions()}
 
 
+@app.get("/api/coach")
+async def coach(user: dict = Depends(require_user)):
+    """Query Coach: corpus-aware suggestions grouped by topic / applicant /
+    cross-doc / recent. Powers the UI 'What can I ask?' panel — no LLM call."""
+    return rag_service.get_coach_data()
+
+
 # ─── Export Conversation ───
 @app.post("/api/export")
 async def export_conversation(messages: list[dict], user: dict = Depends(require_user)):

@@ -335,6 +335,92 @@ async function refreshCompareSelectors(){
   }catch{}
 }
 
+// ─── Query Coach (corpus-aware suggestion panel) ───
+async function openCoach(){
+  const overlay = document.getElementById('coachOverlay');
+  const list = document.getElementById('coachList');
+  const statsEl = document.getElementById('coachStats');
+  overlay.classList.add('open');
+  list.innerHTML = '<div class="cmdk-empty">Analyzing your corpus…</div>';
+  statsEl.textContent = 'Loading…';
+
+  try {
+    const r = await fetch('/api/coach', {headers: authHeaders()});
+    const d = await r.json();
+    if(d.empty){
+      list.innerHTML = '<div class="cmdk-empty">'+esc(d.message || 'No data yet')+'</div>';
+      statsEl.textContent = '';
+      return;
+    }
+    const s = d.stats || {};
+    statsEl.textContent = `${s.total_patents||0} patents · ${s.total_chunks||0} chunks · ${s.section_count||0} IPC sections · ${s.applicant_count||0} applicants`;
+
+    let html = '';
+
+    // Section: Recent
+    if(d.recent){
+      html += `<div class="cmdk-group-label">Recently added</div>`;
+      html += coachItem(`📥 ${d.recent.doc_number}${d.recent.title ? ' — '+d.recent.title.slice(0,40) : ''}`, d.recent.suggested_q);
+    }
+
+    // Section: Topics by IPC
+    if(d.topics?.length){
+      html += `<div class="cmdk-group-label">Browse by topic</div>`;
+      d.topics.forEach(t=>{
+        const label = `🏷 ${t.label} — ${t.count} patents (e.g., ${t.example_doc})`;
+        html += coachItem(label, t.suggested_q);
+      });
+    }
+
+    // Section: Applicants
+    if(d.applicants?.length){
+      html += `<div class="cmdk-group-label">By applicant</div>`;
+      d.applicants.forEach(a=>{
+        const label = `🏢 ${a.name} (${a.count} patent${a.count>1?'s':''})`;
+        html += coachItem(label, a.suggested_q);
+      });
+    }
+
+    // Section: Cross-doc
+    if(d.cross_doc){
+      html += `<div class="cmdk-group-label">Cross-document comparison</div>`;
+      html += coachItem(`⚖️ ${d.cross_doc.doc_a} vs ${d.cross_doc.doc_b} — same IPC section`, d.cross_doc.suggested_q);
+    }
+
+    // Section: Refusal demo
+    if(d.refusal_demo){
+      html += `<div class="cmdk-group-label">Test the refusal mechanism</div>`;
+      html += coachItem(`🚦 ${d.refusal_demo.label} — ${d.refusal_demo.expected}`, d.refusal_demo.suggested_q, true);
+    }
+
+    list.innerHTML = html;
+  } catch(e){
+    list.innerHTML = '<div class="cmdk-empty" style="color:var(--c-danger)">Error: '+esc(e.message)+'</div>';
+    statsEl.textContent = '';
+  }
+}
+
+function coachItem(label, query, isDemo){
+  const cls = isDemo ? 'cmdk-item' : 'cmdk-item';
+  return `<div class="${cls}" onclick="useCoachQuery(${inlineJson(query)})">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:var(--fs-base);font-weight:var(--fw-medium)">${esc(label)}</div>
+      <div style="font-size:var(--fs-xs);color:var(--c-text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ ${esc(query)}</div>
+    </div>
+  </div>`;
+}
+
+function useCoachQuery(q){
+  closeCoach();
+  document.getElementById('qi').value = q;
+  document.getElementById('qi').focus();
+  // optionally auto-send: send();
+}
+
+function closeCoach(){
+  document.getElementById('coachOverlay').classList.remove('open');
+}
+
 // ─── Retrieval funnel viewer ───
 function showFunnel(){
   const q = document.getElementById('qi').value || 'antibody for treating hemophilia';

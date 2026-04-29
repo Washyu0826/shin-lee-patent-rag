@@ -516,6 +516,160 @@ def get_suggested_questions() -> list[str]:
         return ["What is the main technical feature of this patent?"]
 
 
+# ─── Query Coach (corpus-aware suggestion generator) ───
+# Maps IPC main class letter → 中英對照名稱，幫使用者理解資料涵蓋哪些領域
+IPC_SECTIONS = {
+    "A": "民生（食品、農業、醫療器材）",
+    "B": "作業運輸（材料、機械、車輛）",
+    "C": "化學冶金（醫藥、聚合物、金屬）",
+    "D": "紡織造紙",
+    "E": "固定建造（建築、水利）",
+    "F": "機械工程（引擎、熱管理）",
+    "G": "物理（光學、感測、計測）",
+    "H": "電學（電池、半導體、通訊）",
+}
+
+
+def _ipc_main(ipc: str) -> str:
+    """B32B27/08 → 'B', G02B13/00 → 'G'"""
+    return (ipc or "")[:1].upper()
+
+
+def get_coach_data() -> dict:
+    """Walk a sample of the corpus and surface conversation starters
+    organised by IPC topic, applicant, and recency. Used by the UI
+    Query Coach panel — does NOT call any LLM."""
+    from collections import defaultdict, Counter
+    qd = get_qdrant()
+    try:
+        info = qd.get_collection(COLLECTION)
+        total = info.points_count
+    except Exception:
+        return {"empty": True, "message": "Corpus is empty — upload a patent first."}
+
+    if total == 0:
+        return {"empty": True, "message": "Corpus is empty — upload a patent first."}
+
+    # Sample bibliographic-ish chunks (which carry the metadata we need).
+    # Use a generous limit so we get a representative slice without scrolling
+    # the whole 1700-chunk corpus.
+    sample, _ = qd.scroll(collection_name=COLLECTION, with_payload=True,
+                          with_vectors=False, limit=500)
+
+    # Group by patent (one entry per doc_number)
+    patents: dict[str, dict] = {}
+    for p in sample:
+        pl = p.payload or {}
+        dn = pl.get("doc_number")
+        if not dn:
+            continue
+        rec = patents.setdefault(dn, {
+            "doc_number": dn,
+            "filename": pl.get("filename", ""),
+            "title": "", "ipc": "", "applicant": "",
+        })
+        # Only the bibliographic chunk has these neatly; first occurrence wins
+        if pl.get("section") == "bibliographic" or pl.get("section", "").startswith("bibliographic"):
+            text = pl.get("text", "")
+            for line in text.splitlines():
+                if "Title (ZH)" in line and not rec["title"]:
+                    rec["title"] = line.split(":", 1)[-1].strip()
+                if "IPC:" in line and not rec["ipc"]:
+                    rec["ipc"] = line.split(":", 1)[-1].strip().split()[0] if line.split(":", 1)[-1].strip() else ""
+                if "Applicant:" in line and not rec["applicant"]:
+                    rec["applicant"] = line.split(":", 1)[-1].strip()
+
+    # Aggregate
+    by_section: dict[str, list[dict]] = defaultdict(list)
+    by_applicant: Counter = Counter()
+    applicant_examples: dict[str, list[str]] = defaultdict(list)
+    for rec in patents.values():
+        sec = _ipc_main(rec["ipc"])
+        if sec:
+            by_section[sec].append(rec)
+        if rec["applicant"]:
+            by_applicant[rec["applicant"]] += 1
+            applicant_examples[rec["applicant"]].append(rec["doc_number"])
+
+    # Topic suggestions — sorted by chunk count, top 5 sections
+    topics = []
+    for sec, recs in sorted(by_section.items(), key=lambda x: -len(x[1]))[:5]:
+        examples = recs[:2]
+        topics.append({
+            "ipc_main": sec,
+            "label": IPC_SECTIONS.get(sec, sec),
+            "count": len(recs),
+            "example_doc": examples[0]["doc_number"] if examples else "",
+            "example_title": examples[0]["title"] if examples else "",
+            "suggested_q": f"What are the key claims of patent {examples[0]['doc_number']}?" if examples else "",
+        })
+
+    # Applicant suggestions — top 5 by patent count
+    applicants = []
+    for name, count in by_applicant.most_common(5):
+        if count < 1:
+            continue
+        examples = applicant_examples[name][:3]
+        if count >= 2:
+            q = f"Compare patents {examples[0]} and {examples[1]} (both from {name})"
+        else:
+            q = f"What is the main innovation of {examples[0]} ({name})?"
+        applicants.append({
+            "name": name,
+            "count": count,
+            "examples": examples,
+            "suggested_q": q,
+        })
+
+    # Cross-doc suggestion: pick two patents in the same IPC section
+    cross = None
+    for sec, recs in by_section.items():
+        if len(recs) >= 2:
+            cross = {
+                "ipc_main": sec,
+                "label": IPC_SECTIONS.get(sec, sec),
+                "doc_a": recs[0]["doc_number"],
+                "doc_b": recs[1]["doc_number"],
+                "suggested_q": f"Compare patents {recs[0]['doc_number']} and {recs[1]['doc_number']} (both in {IPC_SECTIONS.get(sec, sec)})",
+            }
+            break
+
+    # Recent: scroll a few of the most-recently-ingested by filename mtime
+    recent = None
+    if patents:
+        # We don't have ingestion timestamp in payload; pick the patent
+        # whose doc_number sorts latest as a heuristic for "recent"
+        latest = max(patents.values(), key=lambda r: r["doc_number"])
+        recent = {
+            "doc_number": latest["doc_number"],
+            "title": latest["title"],
+            "suggested_q": f"Summarize the technical features of {latest['doc_number']}",
+        }
+
+    # A "stress test" suggestion that is intentionally meant to trigger the
+    # confidence floor — used to demo the refusal mechanism.
+    refusal_demo = {
+        "label": "驗證系統不會唬爛",
+        "suggested_q": "Find patents about quantum computing and interstellar travel",
+        "expected": "系統會回傳 LOW confidence 並拒答",
+    }
+
+    return {
+        "empty": False,
+        "stats": {
+            "total_chunks": total,
+            "total_patents": len(patents),
+            "section_count": len(by_section),
+            "applicant_count": len(by_applicant),
+        },
+        "topics": topics,
+        "applicants": applicants,
+        "cross_doc": cross,
+        "recent": recent,
+        "refusal_demo": refusal_demo,
+    }
+
+
 # ─── Stats ───
 def get_stats() -> dict:
     info = get_qdrant().get_collection(COLLECTION)

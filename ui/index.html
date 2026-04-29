@@ -135,7 +135,11 @@
           <label title="Hypothetical Document Embeddings — ignored when engine=Auto">
             <input type="checkbox" id="hydeChk" style="margin:0"> HyDE
           </label>
-          <a href="#" onclick="event.preventDefault();showFunnel()" style="margin-left:auto;font-size:var(--fs-xs);font-weight:var(--fw-medium)" data-i18n="label_funnel">Retrieval funnel</a>
+          <a href="#" onclick="event.preventDefault();openCoach()" style="margin-left:auto;font-size:var(--fs-xs);font-weight:var(--fw-medium);display:inline-flex;align-items:center;gap:4px" title="Query Coach — what should I ask?">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>What can I ask?</span>
+        </a>
+        <a href="#" onclick="event.preventDefault();showFunnel()" style="font-size:var(--fs-xs);font-weight:var(--fw-medium)" data-i18n="label_funnel">Retrieval funnel</a>
         </div>
         <div class="input-row">
           <input id="qi" data-i18n-placeholder="placeholder_q" placeholder="Ask about patents…" autocomplete="off">
@@ -198,6 +202,24 @@
       <span><span class="kbd">↑</span><span class="kbd">↓</span> navigate</span>
       <span><span class="kbd">↵</span> run</span>
       <span><span class="kbd">esc</span> close</span>
+    </div>
+  </div>
+</div>
+
+<!-- Query Coach modal -->
+<div class="cmdk-overlay" id="coachOverlay" onclick="if(event.target===this)closeCoach()" style="padding-top:6vh">
+  <div class="cmdk-box" style="max-width:720px" role="dialog" aria-label="Query Coach">
+    <div class="cmdk-input-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <div style="flex:1">
+        <div style="font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--c-text)">What can I ask?</div>
+        <div style="font-size:var(--fs-xs);color:var(--c-text-muted);margin-top:2px" id="coachStats">Loading…</div>
+      </div>
+      <span class="x" onclick="closeCoach()" title="Close" aria-label="Close" style="cursor:pointer;color:var(--c-text-muted);font-size:var(--fs-xl);width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center">×</span>
+    </div>
+    <div class="cmdk-list" id="coachList" style="max-height:60vh"></div>
+    <div class="cmdk-footer">
+      <span>Click any suggestion to drop it into the input</span>
     </div>
   </div>
 </div>
