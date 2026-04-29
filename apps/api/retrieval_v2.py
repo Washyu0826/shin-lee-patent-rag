@@ -15,14 +15,24 @@ Architecture lives in a SEPARATE Qdrant collection (patent_chunks_m3) so the
 baseline pipeline stays untouched and we can A/B compare.
 """
 from __future__ import annotations
-import os, uuid, time, json
-from typing import Optional, Iterable
+
+import os
+import time
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
-    Distance, VectorParams, SparseVectorParams, SparseIndexParams,
-    PointStruct, Filter, FieldCondition, MatchValue, PayloadSchemaType,
-    NamedVector, NamedSparseVector, SparseVector, SearchRequest,
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    NamedSparseVector,
+    NamedVector,
+    PayloadSchemaType,
+    PointStruct,
+    SparseIndexParams,
+    SparseVector,
+    SparseVectorParams,
+    VectorParams,
 )
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
@@ -32,7 +42,7 @@ SPARSE_NAME = "sparse"
 DENSE_DIM = 1024  # bge-m3 fixed dim
 
 _m3_model = None
-_qdrant: Optional[QdrantClient] = None
+_qdrant: QdrantClient | None = None
 
 
 def get_qdrant() -> QdrantClient:
@@ -91,7 +101,7 @@ def _sparse_to_qdrant(sparse_dict: dict) -> SparseVector:
     """Convert {token_id_str: weight_float32} → Qdrant SparseVector."""
     if not sparse_dict:
         return SparseVector(indices=[], values=[])
-    indices = [int(k) for k in sparse_dict.keys()]
+    indices = [int(k) for k in sparse_dict]
     values = [float(v) for v in sparse_dict.values()]
     return SparseVector(indices=indices, values=values)
 
@@ -175,7 +185,7 @@ def reindex_from_baseline(baseline_collection: str = "patent_chunks", limit: int
     return total
 
 
-def _build_filter(filename_filter=None, tag_filter=None, doc_number_filter=None) -> Optional[Filter]:
+def _build_filter(filename_filter=None, tag_filter=None, doc_number_filter=None) -> Filter | None:
     must = []
     if filename_filter:
         must.append(FieldCondition(key="filename", match=MatchValue(value=filename_filter)))

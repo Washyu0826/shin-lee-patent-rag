@@ -1,7 +1,10 @@
 """OCR Service v3 — User-selectable engine + born-digital detection + comparison"""
-import os, subprocess, tempfile, re
+import os
+import re
+import subprocess
+import tempfile
 from pathlib import Path
-from typing import Optional
+
 import fitz
 
 _paddle_ocr = None
@@ -83,7 +86,7 @@ def _ocr_paddle(pdf_path: str) -> dict:
     return {"pages": pages, "full_text": full, "total_pages": len(pages)}
 
 
-def _ocr_tesseract(pdf_path: str) -> Optional[str]:
+def _ocr_tesseract(pdf_path: str) -> str | None:
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp_path = tmp.name
     try:

@@ -6,6 +6,7 @@ Produces, for one chosen patent:
 """
 import sys
 from pathlib import Path
+
 import fitz  # pymupdf
 from lxml import etree
 

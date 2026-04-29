@@ -1,13 +1,27 @@
 """
 RAG Service v3 — Streaming + Multi-turn + Hybrid Search + Reranker + Patent Compare
 """
-import os, uuid, json, time, re
-from typing import Any, Optional, Generator
+import json
+import os
+import re
+import time
+import uuid
+from collections.abc import Generator
+from typing import Any
 
-import requests
 import psycopg2
+import requests
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchText, MatchValue, PayloadSchemaType
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchText,
+    MatchValue,
+    PayloadSchemaType,
+    PointStruct,
+    VectorParams,
+)
 
 # ─── Config ───
 QDRANT_URL   = os.getenv("QDRANT_URL", "http://localhost:6333")
@@ -21,9 +35,9 @@ DB_URL       = os.getenv("DATABASE_URL", "postgresql://patent:patent2026@localho
 MIN_RERANK_SCORE = float(os.getenv("MIN_RERANK_SCORE", "0.05"))  # below this, skip LLM and tell user "no good source"
 MMR_LAMBDA   = float(os.getenv("MMR_LAMBDA", "0.7"))             # 1.0=pure relevance, 0.0=pure diversity
 
-_embedder: Optional[Any] = None
-_reranker: Optional[Any] = None
-_qdrant: Optional[QdrantClient] = None
+_embedder: Any | None = None
+_reranker: Any | None = None
+_qdrant: QdrantClient | None = None
 _db = None
 _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./-]{1,}")
 _DOCNO_RE = re.compile(r"\b(?:TW\d{6,}[A-Z]?|[IM]\d{6,})\b", re.IGNORECASE)
@@ -36,7 +50,7 @@ _STOP_TERMS = {
 
 def init():
     global _embedder, _reranker, _qdrant, _db
-    from sentence_transformers import SentenceTransformer, CrossEncoder
+    from sentence_transformers import CrossEncoder, SentenceTransformer
 
     print(f"[RAG] Loading embedding: {EMBED_MODEL}")
     _embedder = SentenceTransformer(EMBED_MODEL)
@@ -539,7 +553,7 @@ def get_coach_data() -> dict:
     """Walk a sample of the corpus and surface conversation starters
     organised by IPC topic, applicant, and recency. Used by the UI
     Query Coach panel — does NOT call any LLM."""
-    from collections import defaultdict, Counter
+    from collections import Counter, defaultdict
     qd = get_qdrant()
     try:
         info = qd.get_collection(COLLECTION)

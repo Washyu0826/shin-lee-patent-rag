@@ -1,5 +1,7 @@
 """Tiny A/B/C benchmark: baseline vs bge-m3 vs bge-m3+HyDE."""
-import requests, time
+import time
+
+import requests
 
 QUERIES = [
     ("Direct fact", "List the IPC classifications of all uploaded patents"),

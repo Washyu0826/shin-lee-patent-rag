@@ -1,5 +1,11 @@
 # Patent RAG Chatbot
 
+[![CI](https://github.com/Washyu0826/shin-lee-patent-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/Washyu0826/shin-lee-patent-rag/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Code style: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
+[![Status: POC](https://img.shields.io/badge/status-POC-orange)](#%EF%B8%8F-這是什麼版本)
+
 > 一個會「翻書找答案」的 AI 助理 — 把專利檔案丟進來，用中文或英文問問題，它會找出相關段落、生成答案，**每句話都會告訴你來自哪一份檔案的哪一頁**。
 >
 > 學生作品 — 與 TPIsoftware（昕力資訊）合作的 GDG on Campus 專案。

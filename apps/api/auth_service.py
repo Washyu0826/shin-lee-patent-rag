@@ -1,9 +1,10 @@
 """Simple JWT auth for POC — username/password login"""
 import os
 from datetime import datetime, timedelta
-from jose import jwt, JWTError
-from fastapi import HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 
 SECRET = os.getenv("JWT_SECRET", "change-me-in-production-v3")
 ALGORITHM = "HS256"

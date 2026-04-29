@@ -9,8 +9,13 @@ Sequence:
 Run:  .venv/Scripts/python.exe scripts/demo_warmup.py
 """
 from __future__ import annotations
-import sys, time, json, os, requests
-from urllib.parse import urlencode
+
+import json
+import os
+import sys
+import time
+
+import requests
 
 API = os.environ.get("API_URL", "http://127.0.0.1:8000")
 QDRANT = os.environ.get("QDRANT_URL", "http://localhost:6333")

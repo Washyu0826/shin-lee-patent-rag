@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Eval: run test set -> metrics -> HTML report"""
-import argparse,json,time
+import argparse
+import json
+import time
 from pathlib import Path
-import requests,pandas as pd
+
+import pandas as pd
+import requests
+
 API="http://localhost:8000"
 def run(evalset,output):
     qs=[json.loads(l) for l in open(evalset) if l.strip()]

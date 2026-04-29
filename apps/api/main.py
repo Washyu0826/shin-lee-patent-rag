@@ -1,25 +1,28 @@
 """Patent RAG Chatbot v3 — Full-featured FastAPI backend"""
-import os, shutil, time, uuid, json
+import json
+import os
+import shutil
+import time
+import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
-from collections import defaultdict
-from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Depends, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 load_dotenv()
 
-from ocr_service import ocr_pdf, chunk_patent
-from xml_parser import parse_patent_xml, chunk_patent_xml, scan_xml_directory
 import rag_service
 import retrieval_v2  # bge-m3 + dense/sparse RRF + reranker (SOTA path)
 from auth_service import authenticate, create_token, require_admin, require_user
-from webhook import alert_ocr_failure, alert_high_latency
+from ocr_service import chunk_patent, ocr_pdf
+from webhook import alert_high_latency, alert_ocr_failure
+from xml_parser import chunk_patent_xml, parse_patent_xml, scan_xml_directory
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "patents"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -113,10 +116,10 @@ class LoginReq(BaseModel):
 class ChatReq(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=20)
-    filename_filter: Optional[str] = None
-    tag_filter: Optional[str] = None
-    doc_number_filter: Optional[str] = None
-    history: Optional[list[dict]] = None  # [{query, answer}, ...]
+    filename_filter: str | None = None
+    tag_filter: str | None = None
+    doc_number_filter: str | None = None
+    history: list[dict] | None = None  # [{query, answer}, ...]
     stream: bool = False
     engine: str = "baseline"  # "baseline" | "m3" | "auto" (classifier picks)
     use_hyde: bool = False    # Hypothetical Document Embeddings query expansion
@@ -305,6 +308,7 @@ def _search_dispatcher(query: str, top_k: int, engine: str, **filters) -> list[d
 
 
 import re as _re
+
 _IPC_RE = _re.compile(r"\b[A-H]\d{2}[A-Z](?:\s?\d+)(?:/\d+)?\b")     # e.g., F02D 41/00, H10D80/00
 _DOCNO_RE = _re.compile(r"\b(?:TW\d{6,}[A-Z]?|[IM]\d{6,})\b")        # e.g., TW202401234A, I918591, M681222
 
@@ -502,7 +506,7 @@ async def chat(req: ChatReq, user: dict = Depends(require_user)):
 
 
 @app.get("/api/retrieve_debug")
-async def retrieve_debug(query: str = Query(...), engine: str = Query("m3"), tag_filter: Optional[str] = None, doc_number_filter: Optional[str] = None, fetch_k: int = Query(20, ge=5, le=50), user: dict = Depends(require_user)):
+async def retrieve_debug(query: str = Query(...), engine: str = Query("m3"), tag_filter: str | None = None, doc_number_filter: str | None = None, fetch_k: int = Query(20, ge=5, le=50), user: dict = Depends(require_user)):
     """Diagnostic endpoint: show the retrieval funnel (dense / sparse / fused / reranked).
     Helpful for demonstrating WHY a hybrid pipeline picks different sources than
     a single-stage one."""

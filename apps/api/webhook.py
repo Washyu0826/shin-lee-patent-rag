@@ -1,8 +1,8 @@
 """Basic webhook alert notifications"""
 import os
-import requests
 from datetime import datetime
 
+import requests
 
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
 

@@ -1,0 +1,39 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+extend-exclude = [
+    ".venv",
+    "data",
+    "volumes",
+    "scripts/init_db.sql",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort (import order)
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long — line-length already 110, leave the rest
+    "E701",  # one-liner `if x: y` — codebase style, kept for compactness
+    "E702",  # semicolon statements — codebase style for grouped guard clauses
+    "E722",  # bare except — used in best-effort logging paths
+    "E741",  # ambiguous variable names — leave existing 'l' etc.
+    "B008",  # FastAPI Depends() in defaults is idiomatic
+    "B904",  # raise from inside except — not always wanted
+    "B905",  # zip() without strict= — opt-in is fine
+    "SIM105", # contextlib.suppress vs try/except: pass — both acceptable
+    "SIM108", # ternary vs if/else — sometimes if/else is clearer
+    "SIM115", # context manager for open — open/close pairs we accept
+    "W291",  # trailing whitespace in templates / multi-line strings
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F401", "F811", "E402"]  # test fixtures re-import; sys.path tweaks before imports
+"scripts/**" = ["E402"]                 # late imports after sys.path tweaks
+"apps/api/main.py" = ["E402"]           # imports must come after load_dotenv()

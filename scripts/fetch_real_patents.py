@@ -14,9 +14,11 @@ What this script does:
   4. Pick a diverse sample of N patents (covering different IPC sections)
 """
 from __future__ import annotations
-import os, sys
-from pathlib import Path
+
+import sys
 from collections import defaultdict
+from pathlib import Path
+
 import requests
 from lxml import etree
 
@@ -203,7 +205,7 @@ def main():
         sec = (rec["ipc_main"] or "")[:1].upper() or "X"
         by_section[sec].append(rec)
 
-    print(f"[buckets] " + ", ".join(f"{k}={len(v)}" for k, v in sorted(by_section.items())))
+    print("[buckets] " + ", ".join(f"{k}={len(v)}" for k, v in sorted(by_section.items())))
 
     # Round-robin pick from each section until we hit n
     picked = []
